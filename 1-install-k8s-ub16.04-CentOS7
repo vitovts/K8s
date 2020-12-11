@@ -1,0 +1,155 @@
+K8s
+
+Ubuntu 16.04 &&& Centos 7
+
+
+Важно: 
+swap должен быть выключен (если это новый сервер - просто не создавайте раздел для свопа). 
+Выключить можно так (не забудьте удалить соответствующую строку в файле /etc/fstab):
+
+swapoff -a
+
+
+Install Docker
+
+
+#Ubuntu
+
+```
+apt-get install -y docker.io
+```
+&&&
+```
+apt-get install -y \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+add-apt-repository \
+   "deb https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+   $(lsb_release -cs) \
+   stable"
+apt-get update && apt-get install -y docker-ce=$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{print $3}')
+```
+
+#CentOS
+```
+yum install -y docker
+systemctl enable docker && systemctl start docker
+```
+Примечание. Убедитесь, что и docker и kubelet используют один и тот же cgroup драйвер. Проще всего сделать так:
+
+cat << EOF > /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+И перезапустить docker командой:
+
+service docker restart
+
+
+Далее на всех серверах устанавливаем kubeadm, kubelet и kubectl - необходимые компоненты для создания и управления кластером Kubernetes. 
+
+
+Для Ubuntu это можно сделать с помощью команд:
+```
+apt-get update && apt-get install -y apt-transport-https
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+deb http://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+apt-get update
+apt-get install -y kubelet kubeadm kubectl
+```
+
+Для Centos:
+```
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+setenforce 0
+yum install -y kubelet kubeadm kubectl
+systemctl enable kubelet && systemctl start kubelet
+```
+
+
+Примечание. Отключение SELinux командой setenforce 0 необходимо для корректного доступа контейнеров к файловой системе хоста, что, в свою очередь,
+требуется для работы сети у подов (pod networks).
+
+Для организации сети в нашем кластере Kubernetes будем использовать Flannel - программно определяемую сеть (Software Defined Network, SDN), 
+при инициализации кластера нужно добавить параметр --pod-network-cidr=10.244.0.0/16.
+
+Примечание. Ключ --pod-network-cidr позволяет выбрать нужный сетевой плагин (Pod Network Plugin), 
+в зависимости от выбранного провайдера значение этого параметра будет отличаться.
+
+Выбираем один из серверов (в дальнейшем он будет мастером и все операции будем выполнять на нем) и инициализируем кластер:
+
+kubeadm init --pod-network-cidr=10.244.0.0/16
+
+При выполнении данной команды в консоли могут появиться ошибки (их нужно обязательно устранить) и предупреждения (warning), 
+которые можно игнорировать (если это не production-окружение). 
+В случае успеха на экран будет выведена команда для присоединения остальных нод кластера к мастеру - скопируйте и сохраните ее. 
+Результат команды будет примерно следующим:
+
+...
+Your Kubernetes master has initialized successfully!
+
+To start using your cluster, you need to run (as a regular user):
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  http://kubernetes.io/docs/admin/addons/
+
+You can now join any number of machines by running the following on each node
+as root:
+
+  kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
+Как и советуют, мы будем работать с кластером под отдельным, непривилегированным пользователем. Для этого выполняем команды (не под рутом):
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+По умолчанию на мастер-ноде контейнеры не запускаются, мастер только следит за состоянием кластера и размещает ресурсы. 
+Разрешить запуск контейнеров на мастере (особенно если в кластере только одна нода) можно так:
+
+kubectl taint nodes --all node-role.kubernetes.io/master-
+
+Перед запуском приложений в кластере необходимо настроить сеть, причем обязательно с поддержкой Container Network Interface (CNI) - 
+в нашем примере это Flannel (подробнее о вариантах настройки CNI и доступных плагинах в отдельной статье). 
+Важно: в кластере может быть только одна сеть для подов.
+
+Устанавливаем Flannel:
+
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+Убедиться, что кластер стартовал и корректно работает можно с помощью команды:
+
+kubectl -n kube-system get pods
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
