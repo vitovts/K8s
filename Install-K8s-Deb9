@@ -1,0 +1,489 @@
+Install K8s on Debian 9 + HAProxy Heartbeat
+
+Минимальные требования для этого примера:
+
+2 сервера с 2 процессорами и 2 ГБ оперативной памяти для мастер-нод
+3 сервера с 4 процессорами и 4-8 ГБ оперативной памяти для рабочих нод
+3 сервера с 2 процессорами и 2 ГБ оперативной памяти для Etcd и HAProxy
+
+10.172.11.0/24  — подсеть.
+
+10.172.11.1 — виртуальный IP-адрес HAProxy, 
+10.172.11.2 — 4 основных IP-адреса нод Etcd и HAProxy:
+# etcd1 10.172.0.2
+# etcd2 10.172.0.3
+10.172.0.6 — 6 основных IP-адресов мастер-нод Kubernetes,
+# k8s-master-0 10.172.0.6
+# k8s-master-1 10.172.0.7
+
+10.172.0.7 — 9 основных IP-адресов рабочих нод Kubernetes.
+
+База Debian 9 установлена на всех серверах.
+
+Настройка HAProxy и Heartbeat.
+
+У нас больше одной мастер-ноды Kubernetes, и поэтому необходимо настроить перед ними балансировщик нагрузки HAProxy — распределять трафик. 
+Это будет пара серверов HAProxy с одним общим виртуальным IP-адресом. Отказоустойчивость обеспечивается при помощи пакета Heartbeat. 
+Для развертывания мы воспользуемся первыми двумя etcd серверами.
+
+Установим и настроим HAProxy с Heartbeat на первом и втором etcd - серверах (10.172.0.6–7 в этом примере):
+```
+etcd1# apt-get update && apt-get upgrade && apt-get install -y haproxy 
+etcd2# apt-get update && apt-get upgrade && apt-get install -y haproxy
+```
+Сохраните исходную конфигурацию и создайте новую:
+```
+etcd1# mv /etc/haproxy/haproxy.cfg{,.back}
+etcd1# vim /etc/haproxy/haproxy.cfg
+etcd2# mv /etc/haproxy/haproxy.cfg{,.back}
+etcd2# vim /etc/haproxy/haproxy.cfg
+```
+Добавьте эти параметры конфигурации для обоих HAProxy:
+```
+global
+    user haproxy
+    group haproxy
+defaults
+    mode http
+    log global
+    retries 2
+    timeout connect 3000ms
+    timeout server 5000ms
+    timeout client 5000ms
+frontend kubernetes
+    bind 10.172.11.1:6443
+    option tcplog
+    mode tcp
+    default_backend kubernetes-master-nodes
+backend kubernetes-master-nodes
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    server k8s-master-0 10.172.11.6:6443 check fall 3 rise 2
+    server k8s-master-1 10.172.11.7:6443 check fall 3 rise 2
+```
+
+Как видите, обе службы HAProxy делят IP-адрес — 10.172.11.1. 
+Этот виртуальный IP-адрес будет перемещаться между серверами, поэтому чутка схитрим и включим параметр net.ipv4.ip_nonlocal_bind, 
+чтобы разрешить привязку системных служб к нелокальному IP-адресу.
+
+Добавьте эту возможность в файл /etc/sysctl.conf:
+
+etcd1# vim /etc/sysctl.conf
+net.ipv4.ip_nonlocal_bind=1
+etcd2# vim /etc/sysctl.conf
+net.ipv4.ip_nonlocal_bind=1
+
+Запустите на обоих серверах:
+
+
+sysctl -p
+
+Также запустите HAProxy на обоих серверах:
+
+
+etcd1# systemctl start haproxy
+etcd2# systemctl start haproxy
+
+Убедитесь, что HAProxy запущены и прослушиваются по виртуальному IP-адресу на обоих серверах:
+
+
+etcd1# netstat -ntlp
+tcp 0 0 192.168.0.1:6443 0.0.0.0:* LISTEN 2833/haproxy
+etcd2# netstat -ntlp
+tcp 0 0 192.168.0.1:6443 0.0.0.0:* LISTEN 2833/haproxy
+
+установим Heartbeat и настроим этот виртуальный IP.
+
+etcd1# apt-get -y install heartbeat && systemctl enable heartbeat
+etcd2# apt-get -y install heartbeat && systemctl enable heartbeat
+
+Пришло время создать для него несколько файлов конфигурации: для первого и второго серверов они будут, в основном, одинаковыми.
+
+
+Сначала создайте файл /etc/ha.d/authkeys, в этом файле Heartbeat хранит данные для взаимной аутентификации. Файл должен быть одинаковым на обоих серверах:
+
+
+# echo -n securepass | md5sum
+bb77d0d3b3f239fa5db73bdf27b8d29a
+
+etcd1# vim /etc/ha.d/authkeys
+auth 1
+1 md5 bb77d0d3b3f239fa5db73bdf27b8d29a
+
+etcd2# vim /etc/ha.d/authkeys
+auth 1
+1 md5 bb77d0d3b3f239fa5db73bdf27b8d29a
+
+Этот файл должен быть доступен только руту:
+
+
+etcd1# chmod 600 /etc/ha.d/authkeys
+etcd2# chmod 600 /etc/ha.d/authkeys
+
+Теперь создадим основной файл конфигурации для Heartbeat на обоих серверах: для каждого сервера он будет немного отличаться.
+
+
+Создайте /etc/ha.d/ha.cf:
+
+
+etcd1
+
+```
+etcd1# vim /etc/ha.d/ha.cf
+#       keepalive: how many seconds between heartbeats
+#
+keepalive 2
+#
+#       deadtime: seconds-to-declare-host-dead
+#
+deadtime 10
+#
+#       What UDP port to use for udp or ppp-udp communication?
+#
+udpport        694
+bcast ens18
+mcast ens18 225.0.0.1 694 1 0
+ucast ens18 10.172.11.7
+#       What interfaces to heartbeat over?
+udp   ens18
+#
+#       Facility to use for syslog()/logger (alternative to log/debugfile)
+#
+logfacility     local0
+#
+#       Tell what machines are in the cluster
+#       node    nodename ...    -- must match uname -n
+node    etcd1
+node    etcd2
+```
+
+etcd2
+
+etcd2# vim /etc/ha.d/ha.cf
+```
+#       keepalive: how many seconds between heartbeats
+#
+keepalive 2
+#
+#       deadtime: seconds-to-declare-host-dead
+#
+deadtime 10
+#
+#       What UDP port to use for udp or ppp-udp communication?
+#
+udpport        694
+bcast ens18
+mcast ens18 225.0.0.1 694 1 0
+ucast ens18 10.172.11.6
+#       What interfaces to heartbeat over?
+udp   ens18
+#
+#       Facility to use for syslog()/logger (alternative to vlog/debugfile)
+#
+logfacility     local0
+#
+#       Tell what machines are in the cluster
+#       node    nodename ...    -- must match uname -n
+node    etcd1
+node    etcd2
+```
+
+Параметры «ноды» для этой конфигурации получите, запустив uname -n на обоих Etcd серверах. 
+Также используйте имя вашей сетевой карты вместо ens18.
+
+
+Наконец, нужно создать на этих серверах файл /etc/ha.d/haresources. Для обоих серверов файл должен быть одинаковым. 
+В этом файле мы задаем наш общий IP-адрес и определяем, какая нода является главной по умолчанию:
+
+etcd1# vim /etc/ha.d/haresources
+etcd1 10.172.11.1
+etcd2# vim /etc/ha.d/haresources
+etcd1 10.172.11.1
+
+Когда все готово, запускаем службы Heartbeat на обоих серверах и проверяем, что на ноде etcd1 мы получили этот заявленный виртуальный IP:
+
+
+etcd1# systemctl restart heartbeat
+etcd2# systemctl restart heartbeat
+etcd1# ip a
+ens18: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether xx:xx:xx:xx:xx:xx brd ff:ff:ff:ff:ff:ff
+    inet 192.168.0.2/24 brd 192.168.0.255 scope global ens18
+       valid_lft forever preferred_lft forever
+    inet 192.168.0.1/24 brd 192.168.0.255 scope global secondary
+
+Вы можете проверить, что HAProxy работает нормально, запустив nc по адресу 192.168.0.1 6443. 
+Должно быть, у вас превышено время ожидания, поскольку Kubernetes API пока не прослушивается на серверной части. 
+Но это означает, что HAProxy и Heartbeat настроены правильно.
+
+# apt install netcat -y
+
+# nc -v 10.172.11.1 6443 
+Connection to 93.158.95.90 6443 port [tcp/*] succeeded!
+
+
+4. Подготовка нод для Kubernetes
+
+Следующим шагом подготовим все ноды Kubernetes. 
+Нужно установить Docker с некоторыми дополнительными пакетами, добавить репозиторий Kubernetes и установить из него пакеты kubelet, kubeadm, kubectl. 
+Эта настройка одинакова для всех нод Kubernetes (мастер-, рабочих и проч.)
+
+
+Основное преимущество Kubeadm в том, что дополнительного ПО много не надо. 
+Установили kubeadm на всех хостах — и пользуйтесь; хоть сертификаты CA генерируйте.
+
+Установка Docker на всех нодах:
+
+
+Update the apt package index
+# apt-get update
+Install packages to allow apt to use a repository over HTTPS 
+# apt-get -y install \
+  apt-transport-https \
+  ca-certificates \
+  curl \
+  gnupg2 \
+  software-properties-common
+Add Docker’s official GPG key
+# curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+Add docker apt repository
+# apt-add-repository \
+  "deb [arch=amd64] https://download.docker.com/linux/debian \
+  $(lsb_release -cs) \
+  stable"
+Install docker-ce.
+# apt-get update && apt-get -y install docker-ce
+Check docker version
+# docker -v
+Docker version 18.09.0, build 4d60db4
+
+После этого установите на всех нодах пакеты Kubernetes:
+
+kubeadm: команда для загрузки кластера.
+kubelet: компонент, который запускается на всех компьютерах в кластере и выполняет действия вроде как запуска подов и контейнеров.
+kubectl: командная строка util для связи с кластером.
+kubectl — по желанию; я часто устанавливаю его на всех нодах, чтобы запускать кое-какие команды Kubernetes для отладки.
+
+# curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+Add the Google repository
+# cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+Update and install packages
+# apt-get update && apt-get install -y kubelet kubeadm kubectl
+Hold back packages
+# apt-mark hold kubelet kubeadm kubectl
+Check kubeadm version
+# kubeadm version 
+kubeadm version: &version.Info{Major:"1", Minor:"13", GitVersion:"v1.13.1", GitCommit:"eec55b9dsfdfgdfgfgdfgdfgdf365bdd920", GitTreeState:"clean", BuildDate:"2018-12-13T10:36:44Z", GoVersion:"go1.11.2", Compiler:"gc", Platform:"linux/amd64"}
+
+Установив kubeadm и остальные пакеты, не забудьте отключить swap.
+
+
+# swapoff -a
+# sed -i '/ swap / s/^/#/' /etc/fstab
+
+Повторите установку на остальных нодах. 
+Пакеты ПО одинаковыми для всех нод кластера, и только следующая конфигурация определит роли, которые они получат позже.
+
+
+5. Настройка кластера HA Etcd
+
+Итак, завершив приготовления, настроим кластер Kubernetes. Первым кирпичиком будет кластер HA Etcd, который также настраивается с помощью инструмента kubeadm.
+
+
+Прежде чем начнем, убедитесь, что все etcd ноды сообщаются через порты 2379 и 2380. Кроме того, между ними нужно настроить ssh-доступ — чтобы использовать scp.
+Начнем с первой etcd ноды, а затем просто скопируем все необходимые сертификаты и файлы конфигурации на остальные серверы.
+
+
+На всех etcd нодах нужно добавить новый файл конфигурации systemd для юнита kubelet с более высоким приоритетом:
+
+
+etcd-nodes# cat << EOF > /etc/systemd/system/kubelet.service.d/20-etcd-service-manager.conf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/kubelet --address=127.0.0.1 --pod-manifest-path=/etc/kubernetes/manifests --allow-privileged=true
+Restart=always
+EOF
+
+etcd-nodes# systemctl daemon-reload
+etcd-nodes# systemctl restart kubelet
+
+Затем перейдем по ssh к первой etcd ноде — ее будем использовать для генерации всех необходимых конфигураций kubeadm для каждой etcd ноды, а затем их скопируем.
+
+
+# Export all our etcd nodes IP's as variables 
+etcd1# export HOST0=192.168.0.2
+etcd1# export HOST1=192.168.0.3
+etcd1# export HOST2=192.168.0.4
+
+# Create temp directories to store files for all nodes
+etcd1# mkdir -p /tmp/${HOST0}/ /tmp/${HOST1}/ /tmp/${HOST2}/
+etcd1# ETCDHOSTS=(${HOST0} ${HOST1} ${HOST2})
+etcd1# NAMES=("infra0" "infra1" "infra2")
+
+etcd1# for i in "${!ETCDHOSTS[@]}"; do
+HOST=${ETCDHOSTS[$i]}
+NAME=${NAMES[$i]}
+cat << EOF > /tmp/${HOST}/kubeadmcfg.yaml
+apiVersion: "kubeadm.k8s.io/v1beta1"
+kind: ClusterConfiguration
+etcd:
+    local:
+        serverCertSANs:
+        - "${HOST}"
+        peerCertSANs:
+        - "${HOST}"
+        extraArgs:
+            initial-cluster: ${NAMES[0]}=https://${ETCDHOSTS[0]}:2380,${NAMES[1]}=https://${ETCDHOSTS[1]}:2380,${NAMES[2]}=https://${ETCDHOSTS[2]}:2380
+            initial-cluster-state: new
+            name: ${NAME}
+            listen-peer-urls: https://${HOST}:2380
+            listen-client-urls: https://${HOST}:2379
+            advertise-client-urls: https://${HOST}:2379
+            initial-advertise-peer-urls: https://${HOST}:2380
+EOF
+done
+
+Теперь создадим основной центр сертификации, используя kubeadm
+
+
+etcd1# kubeadm init phase certs etcd-ca
+
+Эта команда создаст два файла ca.crt & ca.key в директории /etc/kubernetes/pki/etcd/.
+
+
+etcd1# ls /etc/kubernetes/pki/etcd/ 
+ca.crt  ca.key
+
+Теперь сгенерируем сертификаты для всех etcd нод:
+
+
+### Create certificates for the etcd3 node 
+etcd1# kubeadm init phase certs etcd-server --config=/tmp/${HOST2}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs etcd-peer --config=/tmp/${HOST2}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs etcd-healthcheck-client --config=/tmp/${HOST2}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs apiserver-etcd-client --config=/tmp/${HOST2}/kubeadmcfg.yaml
+etcd1# cp -R /etc/kubernetes/pki /tmp/${HOST2}/
+### cleanup non-reusable certificates
+etcd1# find /etc/kubernetes/pki -not -name ca.crt -not -name ca.key -type f -delete
+### Create certificates for the etcd2 node
+etcd1# kubeadm init phase certs etcd-server --config=/tmp/${HOST1}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs etcd-peer --config=/tmp/${HOST1}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs etcd-healthcheck-client --config=/tmp/${HOST1}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs apiserver-etcd-client --config=/tmp/${HOST1}/kubeadmcfg.yaml
+etcd1# cp -R /etc/kubernetes/pki /tmp/${HOST1}/
+### cleanup non-reusable certificates again
+etcd1# find /etc/kubernetes/pki -not -name ca.crt -not -name ca.key -type f -delete
+### Create certificates for the this local node
+etcd1# kubeadm init phase certs etcd-server --config=/tmp/${HOST0}/kubeadmcfg.yaml
+etcd1 #kubeadm init phase certs etcd-peer --config=/tmp/${HOST0}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs etcd-healthcheck-client --config=/tmp/${HOST0}/kubeadmcfg.yaml
+etcd1# kubeadm init phase certs apiserver-etcd-client --config=/tmp/${HOST0}/kubeadmcfg.yaml
+# No need to move the certs because they are for this node
+# clean up certs that should not be copied off this host
+etcd1# find /tmp/${HOST2} -name ca.key -type f -delete
+etcd1# find /tmp/${HOST1} -name ca.key -type f -delete
+
+Затем скопируем сертификаты и конфигурации kubeadm на ноды etcd2 и etcd3.
+
+
+Сначала сгенерируйте пару ssh-ключей на etcd1 и добавьте открытую часть к нодам etcd2 и 3. В этом примере все команды выполняются от имени пользователя, владеющего всеми правами в системе.
+
+etcd1# scp -r /tmp/${HOST1}/* ${HOST1}:
+etcd1# scp -r /tmp/${HOST2}/* ${HOST2}:
+### login to the etcd2 or run this command remotely by ssh
+etcd2# cd /root
+etcd2# mv pki /etc/kubernetes/
+### login to the etcd3 or run this command remotely by ssh
+etcd3# cd /root
+etcd3# mv pki /etc/kubernetes/
+
+Прежде чем запустить кластер etcd, убедитесь, что файлы существуют на всех нодах:
+
+
+Список необходимых файлов на etcd1:
+
+
+/tmp/192.168.0.2
+└── kubeadmcfg.yaml
+---
+/etc/kubernetes/pki
+├── apiserver-etcd-client.crt
+├── apiserver-etcd-client.key
+└── etcd
+    ├── ca.crt
+    ├── ca.key
+    ├── healthcheck-client.crt
+    ├── healthcheck-client.key
+    ├── peer.crt
+    ├── peer.key
+    ├── server.crt
+    └── server.key
+
+Для ноды etcd2 это:
+
+
+/root
+└── kubeadmcfg.yaml
+---
+/etc/kubernetes/pki
+├── apiserver-etcd-client.crt
+├── apiserver-etcd-client.key
+└── etcd
+    ├── ca.crt
+    ├── healthcheck-client.crt
+    ├── healthcheck-client.key
+    ├── peer.crt
+    ├── peer.key
+    ├── server.crt
+    └── server.key
+
+И последняя нода etcd3:
+
+
+/root
+└── kubeadmcfg.yaml
+---
+/etc/kubernetes/pki
+├── apiserver-etcd-client.crt
+├── apiserver-etcd-client.key
+└── etcd
+    ├── ca.crt
+    ├── healthcheck-client.crt
+    ├── healthcheck-client.key
+    ├── peer.crt
+    ├── peer.key
+    ├── server.crt
+    └── server.key
+
+Когда все сертификаты и конфигурации на месте, создаем манифесты. На каждой ноде выполните команду kubeadm — чтобы сгенерировать статический манифест для кластера etcd:
+
+
+etcd1# kubeadm init phase etcd local --config=/tmp/192.168.0.2/kubeadmcfg.yaml
+etcd1# kubeadm init phase etcd local --config=/root/kubeadmcfg.yaml
+etcd1# kubeadm init phase etcd local --config=/root/kubeadmcfg.yaml
+
+Теперь кластер etcd — по идее — настроен и исправен. Проверьте, выполнив следующую команду на ноде etcd1:
+
+
+etcd1# docker run --rm -it \
+--net host \
+-v /etc/kubernetes:/etc/kubernetes quay.io/coreos/etcd:v3.2.24 etcdctl \
+--cert-file /etc/kubernetes/pki/etcd/peer.crt \
+--key-file /etc/kubernetes/pki/etcd/peer.key \
+--ca-file /etc/kubernetes/pki/etcd/ca.crt \
+--endpoints https://192.168.0.2:2379 cluster-health
+### status output
+member 37245675bd09ddf3 is healthy: got healthy result from https://192.168.0.3:2379 
+member 532d748291f0be51 is healthy: got healthy result from https://192.168.0.4:2379 
+member 59c53f494c20e8eb is healthy: got healthy result from https://192.168.0.2:2379 
+cluster is healthy
+
+Кластер etcd поднялся, так что двигаемся дальше.
+
+
+
+
+
