@@ -1,0 +1,244 @@
+Kubernetes HA
+
+# lsb_release -a
+```
+No LSB modules are available.
+Distributor ID: Debian
+Description:    Debian GNU/Linux 9.13 (stretch)
+Release:        9.13
+Codename:       stretch
+```
+
+
+VM
+```
+master01  10.172.11.11
+master02  10.172.11.12
+master03  10.172.11.13
+
+worker01  10.172.11.101
+worker02  10.172.11.102
+worker03  10.172.11.103
+```
+
+Soft
+```
+Docker
+K8s
+``
+
+
+Pre-Install
+```
+# apt-get update && apt-get install -y curl apt-transport-https git curl
+```
+
+Проверка, что ip адрес хостов на мастерах соответствует тому, на котором будет слушать API сервер kubernetes
+```
+hostname && hostname -i
+master01
+10.172.11.11
+```
+
+SWAP
+```
+Обязательно отключите SWAP, иначе kubeadm будет выдавать ошибку
+[ERROR Swap]: running with swap on is not supported. Please disable swap
+
+swapoff -a
+```
+
+На master ноды скопируем репозиторий с шаблонами конфигов
+```
+# git clone https://github.com/rjeka/kubernetes-ceph-percona.git
+cd kubernetes-ceph-percona/
+```
+
+vim create-config.sh
+```
+...
+# master01 ip address
+export K8SHA_IP1=10.172.11.11 
+
+# master02 ip address
+export K8SHA_IP2=10.172.11.12
+
+# master03 ip address
+export K8SHA_IP3=10.172.11.13
+
+# master01 hostname
+export K8SHA_HOSTNAME1=master01
+
+# master02 hostname
+export K8SHA_HOSTNAME2=master02
+
+# master03 hostname
+export K8SHA_HOSTNAME3=master03
+...
+```
+
+
+Update core OS
+```
+Данный шаг является необязательным, так как ядро нужно будем обновлять из back портов, и делаете Вы это на свой страх и риск. 
+Возможно, Вы никогда столкнетесь с данной проблемой, а если и столкнетесь, то обновить ядро можно и после разворачивания kubernetes. 
+В общем, решать Вам.
+Обновление ядра требуется для устранения старого бага docker, который исправили только в ядре linux версии 4.18. 
+Более подробно про этот баг можно почитать вот здесь. Выражался баг в периодическом зависании сетевого интерфейса на нодах kubernetes c ошибкой:
+
+waiting for eth0 to become free. Usage count = 1
+
+У меня после установки ОС было ядро версии 4.9
+
+# uname -a
+Linux master01 4.9.0-7-amd64 #1 SMP Debian 4.9.110-3+deb9u2 (2018-08-13) x86_64 GNU/Linux
+
+На каждой машине для kubernetes выполняем
+
+Шаг №1 Добавляем back ports в source list
+
+# echo deb http://ftp.debian.org/debian stretch-backports main > /etc/apt/sources.list
+# apt-get update
+# apt-cache policy linux-compiler-gcc-6-x86
+
+Шаг №2 Установка пакетов
+
+# apt install -y -t stretch-backports linux-image-amd64 linux-headers-amd64
+
+Шаг №3 Перезагрузка
+
+#reboot
+
+Проверяем что все ОК
+
+# uname -a
+Linux master01 4.19.0-0.bpo.5-amd64 #1 SMP Debian 4.19.37-4~bpo9+1 (2019-06-19) x86_64 GNU/Linux
+```
+
+
+Install Docker and K8s
+
+Docker (https://docs.docker.com/engine/install/debian/)
+
+```
+## Uninstall old versions
+# apt-get remove docker docker-engine docker.io containerd runc
+
+## Install using the repository
+### Update the apt package index and install packages to allow apt to use a repository over HTTPS
+
+# apt-get update
+# apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg-agent \
+    software-properties-common
+
+### Add Docker’s official GPG key
+
+# curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+
+# sudo apt-key fingerprint 0EBFCD88
+
+# lsb_release -cs
+
+# add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/debian \
+   $(lsb_release -cs) \
+   stable"
+
+## INSTALL DOCKER ENGINE
+
+# apt-get update
+# apt-get install docker-ce docker-ce-cli containerd.io
+
+
+## List the versions available in your repo:
+
+# apt-cache madison docker-ce
+-->> :19.03.14~3-0~debian-stretch
+
+# apt-get install docker-ce=<VERSION_STRING> docker-ce-cli=<VERSION_STRING> containerd.io
+
+# docker run hello-world
+```
+
+## Kubelet, Kubectl, Kubeadm
+### Ставим на все ноды кластера, согласно документации kubernetes
+(https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#)
+
+```
+Letting iptables see bridged traffic
+Make sure that the br_netfilter module is loaded. 
+This can be done by running lsmod | grep br_netfilter. 
+To load it explicitly call sudo modprobe br_netfilter.
+
+As a requirement for your Linux Node's iptables to correctly see bridged traffic, 
+you should ensure net.bridge.bridge-nf-call-iptables is set to 1 in your sysctl config, e.g.
+```
+
+```
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sudo sysctl --system
+```
+
+```
+# apt-get update && apt-get install -y apt-transport-https curl
+
+# curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+# apt-get update
+# apt-get install -y kubelet kubeadm kubectl
+# apt-mark hold kubelet kubeadm kubectl
+
+# systemctl daemon-reload
+# systemctl restart kubelet
+
+```
+
+Install ETCD
+
+
+
+
+
+
+
+
+   
+
+
+
+``
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
