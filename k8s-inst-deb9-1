@@ -119,6 +119,7 @@ Linux master01 4.19.0-0.bpo.5-amd64 #1 SMP Debian 4.19.37-4~bpo9+1 (2019-06-19) 
 Install Docker and K8s
 
 Docker (https://docs.docker.com/engine/install/debian/)
+### Ставим на все ноды кластера, согласно документации kubernetes
 
 ```
 ## Uninstall old versions
@@ -205,21 +206,597 @@ EOF
 
 Install ETCD
 
+etcd — это распределенное хранилище типа «ключ-значение» c открытым исходным кодом. 
+etcd написан на GO и используется в kubernetes фактически, как база данных для хранения состояния кластера. 
+etcd можно устанавливать многими способами. 
+Можно устанавливать локально и запускать, как демона, можно запускать в docker контейнерах, можно устанавливать даже как поды кубернетеса. 
+Можно устанавливать руками, а можно установить с помощью kubeadm (я данный способ не пробовал). 
+Можно устанавливать на машины кластера или отдельные сервера.
+Я буду устанавливать etcd локально на master ноды и запускать, как демон, через systemd, а также рассмотрю установку в докере. 
+Я использую etcd без TLS, если вам нужен TLS обратитесь к документации самого etcd или kubernetes
+Также в моем github будет выложен ansible-playbook для установки etcd с запуском через systemd.
+
+
+
+Установка локально, запуск через systemd
+
+На всех мастерах: (на рабочих нодах кластера этот шаг выполнять не нужно)
+
+Шаг №1 Скачиваем и распаковываем архив с etcd:
+```
+mkdir etcd
+cd etcd
+export etcdVersion=v3.3.10
+wget https://github.com/coreos/etcd/releases/download/$etcdVersion/etcd-$etcdVersion-linux-amd64.tar.gz
+tar -xvf etcd-$etcdVersion-linux-amd64.tar.gz -C /usr/local/bin/ --strip-components=1
+```
+
+Шаг №2 Создаем конфиг файл для ETCD
+```
+cd ..
+./create-config.sh etcd
+
+Скрипт принимает на вход значение etcd, и формирует конфиг файл в каталоге etcd. 
+После работы скрипта готовый конфиг файл будет находится в каталоге etcd.
+Для всех других конфигов, скрипт работает по тому же принципу. 
+Принимает на вход какое-то значение и создает конфиг в определенном каталоге.
+
+
+Шаг №3
+Запускаем etcd кластер и проверяем его работоспособность
+
+
+systemctl start etcd
+
+Проверяем работоспособность демона
+
+
+systemctl status etcd
+● etcd.service - etcd
+   Loaded: loaded (/etc/systemd/system/etcd.service; disabled; vendor preset: enabled)
+   Active: active (running) since Sun 2019-07-07 02:34:28 MSK; 4min 46s ago
+     Docs: https://github.com/coreos/etcd
+ Main PID: 7471 (etcd)
+    Tasks: 14 (limit: 4915)
+   CGroup: /system.slice/etcd.service
+           └─7471 /usr/local/bin/etcd --name master01 --data-dir /var/lib/etcd --listen-client-urls http://0.0.0.0:2379,http://0.0.0.0:4001 --advertise-client-urls http://10.73.71.25:2379,http://10.73.71.
+
+Jul 07 02:34:28 master01 etcd[7471]: b11e73358a31b109 [logterm: 1, index: 3, vote: 0] cast MsgVote for f67dd9aaa8a44ab9 [logterm: 2, index: 5] at term 554
+Jul 07 02:34:28 master01 etcd[7471]: raft.node: b11e73358a31b109 elected leader f67dd9aaa8a44ab9 at term 554
+Jul 07 02:34:28 master01 etcd[7471]: published {Name:master01 ClientURLs:[http://10.73.71.25:2379 http://10.73.71.25:4001]} to cluster d0979b2e7159c1e6
+Jul 07 02:34:28 master01 etcd[7471]: ready to serve client requests
+Jul 07 02:34:28 master01 etcd[7471]: serving insecure client requests on [::]:4001, this is strongly discouraged!
+Jul 07 02:34:28 master01 systemd[1]: Started etcd.
+Jul 07 02:34:28 master01 etcd[7471]: ready to serve client requests
+Jul 07 02:34:28 master01 etcd[7471]: serving insecure client requests on [::]:2379, this is strongly discouraged!
+Jul 07 02:34:28 master01 etcd[7471]: set the initial cluster version to 3.3
+Jul 07 02:34:28 master01 etcd[7471]: enabled capabilities for version 3.3
+lines 1-19
+
+
+И работоспособность самого кластера:
+
+# etcdctl cluster-health
+```
+member 66c198772b3d48 is healthy: got healthy result from http://10.172.11.12:2379
+member 8309adebf8b4ee40 is healthy: got healthy result from http://10.172.11.13:2379
+member e63cc4471282b0f4 is healthy: got healthy result from http://10.172.11.11:2379
+cluster is healthy
+```
+
+# etcdctl member list
+```
+6c198772b3d48: name=master02 peerURLs=http://10.172.11.12:2380 clientURLs=http://10.172.11.12:2379,http://10.172.11.12:4001 isLeader=false
+8309adebf8b4ee40: name=master03 peerURLs=http://10.172.11.13:2380 clientURLs=http://10.172.11.13:2379,http://10.172.11.13:4001 isLeader=false
+e63cc4471282b0f4: name=master01 peerURLs=http://10.172.11.11:2380 clientURLs=http://10.172.11.11:2379,http://10.172.11.11:4001 isLeader=true
+```
+
+Установка etcd локально c помощью ansible, запуск через systemd
+Если вы хотите запустить etcd в докере, то под спойлером инструкция.
+
+Установка etcd c помощью docker-compose, запуск в докер
+
+------------------------------------------------
+
+Запуск первого мастера kubernetes
+
+
+Первым делом нам нужно сгенерировать конфиг для kubeadmin
+
+
+./create-config.sh kubeadm
+
+Разбираем конфиг для kubeadmvim
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 10.73.71.25 #Адрес на котором слушает API-сервер
+---
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+kubernetesVersion: stable #Версия кластера которую мы будем устанавливать
+apiServer: #Список хостов для которых kubeadm генерирует сертификаты
+  certSANs:
+  - 127.0.0.1
+  - 10.73.71.25
+  - 10.73.71.26
+  - 10.73.71.27
+controlPlaneEndpoint: 10.73.71.25 #адрес мастера или балансировщика нагрузки
+etcd: #адреса кластера etc
+  external:
+    endpoints:
+    - http://10.73.71.25:2379 
+    - http://10.73.71.26:2379
+    - http://10.73.71.27:2379
+networking:
+  podSubnet: 192.168.0.0/16 # подсеть для подов, у каждого CNI она своя.
+
+Почитать про подсети CNI можно в документации kubernetes
+Это минимально рабочий конфиг. Для кластера с тремя мастерами Вы можете изменять его под конфигурацию своего кластера. Например, если Вы хотите использовать 2 мастера, то просто укажите в certSANs два адреса.
+Все параметра конфига можно найти в описании API kubeadm.
+
+
+Инициируем первый мастер
+
+
+kubeadm init  --config=kubeadmin/kubeadm-init.yaml
+
+Если kubeadm отработает без ошибок, то на выходе мы получим примерно следующий вывод:
+
+  
+ ```
+ root@master01:~/kubernetes-ceph-percona# kubeadm init  --config=kubeadmin/kubeadm-init.yaml
+W1216 09:01:09.022733    1098 common.go:77] your configuration file uses a deprecated API spec: "kubeadm.k8s.io/v1beta1". Please use 'kubeadm config migrate --old-config old.yaml --new-config new.yaml', which will write the new, similar spec us
+ing a newer API version.
+W1216 09:01:09.034154    1098 common.go:77] your configuration file uses a deprecated API spec: "kubeadm.k8s.io/v1beta1". Please use 'kubeadm config migrate --old-config old.yaml --new-config new.yaml', which will write the new, similar spec us
+ing a newer API version.
+[init] Using Kubernetes version: v1.20.0
+[preflight] Running pre-flight checks
+        [WARNING IsDockerSystemdCheck]: detected "cgroupfs" as the Docker cgroup driver. The recommended driver is "systemd". Please follow the guide at https://kubernetes.io/docs/setup/cri/
+        [WARNING SystemVerification]: missing optional cgroups: hugetlb
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action in beforehand using 'kubeadm config images pull'
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "ca" certificate and key
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local master01] and IPs [10.96.0.1 10.172.11.11 10.172.11.12 10.172.11.13 127.0.0.1]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+[certs] Generating "front-proxy-ca" certificate and key
+[certs] Generating "front-proxy-client" certificate and key
+[certs] External etcd mode: Skipping etcd/ca certificate authority generation
+[certs] External etcd mode: Skipping etcd/server certificate generation
+[certs] External etcd mode: Skipping etcd/peer certificate generation
+[certs] External etcd mode: Skipping etcd/healthcheck-client certificate generation
+[certs] External etcd mode: Skipping apiserver-etcd-client certificate generation
+[certs] Generating "sa" key and public key
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+[kubeconfig] Writing "admin.conf" kubeconfig file
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s
+[apiclient] All control plane components are healthy after 21.051575 seconds
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[kubelet] Creating a ConfigMap "kubelet-config-1.20" in namespace kube-system with the configuration for the kubelets in the cluster
+[upload-certs] Skipping phase. Please see --upload-certs
+[mark-control-plane] Marking the node master01 as control-plane by adding the labels "node-role.kubernetes.io/master=''" and "node-role.kubernetes.io/control-plane='' (deprecated)"
+[mark-control-plane] Marking the node master01 as control-plane by adding the taints [node-role.kubernetes.io/master:NoSchedule]
+[bootstrap-token] Using token: f57bjh.ndtlnj6z41vlvav1
+[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles
+[bootstrap-token] configured RBAC rules to allow Node Bootstrap tokens to get nodes
+[bootstrap-token] configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+You can now join any number of control-plane nodes by copying certificate authorities
+and service account keys on each node and then running the following as root:
+
+  kubeadm join 10.172.11.11:6443 --token f57bjh.ndtlnj6z41vlvav1 \
+    --discovery-token-ca-cert-hash sha256:a26a5bdfe25edee5d318ed2be735b0e5e4725e57322e9b1a1d29897158a8ec04 \
+    --control-plane 
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 10.172.11.11:6443 --token f57bjh.ndtlnj6z41vlvav1 \
+    --discovery-token-ca-cert-hash sha256:a26a5bdfe25edee5d318ed2be735b0e5e4725e57322e9b1a1d29897158a8ec04 
+root@master01:~/kubernetes-ceph-percona#   
+```
+
+
+
+### Установка CNI Calico
+
+Пришло время установить сеть, в которой будут работать наши поды. Я использую calico, ее и будем ставить.
+А для начала настроим доступ для kubelet. Все команды выполняем на master01
+
+-- Если вы работаете из-под root
+```
+# export KUBECONFIG=/etc/kubernetes/admin.conf
+```
+
+--- Если из-под простого пользователя
+```
+# mkdir -p $HOME/.kube
+# sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+# sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+Также Вы можете управлять кластером со своего ноутбука или любой локальной машины. 
+Для этого скопируйте файл /etc/kubernetes/admin.conf на свой ноутбук или любую другую машину в $HOME/.kube/config
+
+
+Ставим CNI согласно документации kubernetes
+```
+# kubectl apply -f https://docs.projectcalico.org/v3.8/manifests/calico.yaml
+```
+
+Ждем, пока все поды поднимутся
+
+
+# watch -n1 kubectl get pods -A
+```
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS   AGE
+kube-system   calico-kube-controllers-59f54d6bbc-psr2z   1/1     Running   0          96s
+kube-system   calico-node-hm49z                          1/1     Running   0          96s
+kube-system   coredns-5c98db65d4-svcx9                   1/1     Running   0          77m
+kube-system   coredns-5c98db65d4-zdlb8                   1/1     Running   0          77m
+kube-system   kube-apiserver-master01                    1/1     Running   0          76m
+kube-system   kube-controller-manager-master01           1/1     Running   0          77m
+kube-system   kube-proxy-nkdqn                           1/1     Running   0          77m
+kube-system   kube-scheduler-master01                    1/1     Running   0          77m
+```
+
+
+Запуск второго и третьего мастера kubernetes
+
+Перед тем, как запустить master02 и master03, нужно с master01 скопировать сертификаты, которые сгенерировал kubeadm при создании кластера. 
+Я буду копировать через scp
+
+-- На master01
+```
+
+# export master02=10.172.11.12
+# export master03=10.172.11.13
+
+scp -r /etc/kubernetes/pki $master02:/etc/kubernetes/ 
+scp -r /etc/kubernetes/pki $master03:/etc/kubernetes/
+```
+
+На master02 и master03
+```
+
+Создаем конфиг для kubeadm
+
+./create-config.sh kubeadm
+
+И добавляем в кластер master02 и master03
+
+
+kubeadm init  --config=kubeadmin/kubeadm-init.yaml
+
+Глюки при нескольких сетевых интерфейсах !!!!
+```
+
+
+### Добавляем worker ноды в кластер
+
+На данный момент у нас работает кластер, в котором запущены три master ноды. 
+Но master ноды — это машины, на которых работает api, scheduler и прочие сервисы кластера kubernetes. 
+Для того, чтобы мы могли запускать свои поды, нам нужны так называемые worker ноды.
+Если Вы ограничены в ресурсах, то можно запускать поды и на master нодах.Но я лично не советую так делать.
+
+
+# Запуск подов на мастернодах
+```
+Для того, чтобы разрешить запуск подов на master нодах, выполните следующую команду на любом из мастеров
+
+kubectl taint nodes --all node-role.kubernetes.io/master-
+
+## Устанавливаем на worker ноды kubelet, kubeadm, kubectl и докер как на master нодах
+
+Установка kubelet, kubeadm, kubectl и докер
+
+apt-get update && apt-get install -y apt-transport-https curl
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+apt-get update
+apt-get install -y kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl
+
+Установка Docker
+
+Устанавливаем docker по инструкции из документации
+
+
+apt-get remove docker docker-engine docker.io containerd runc
+apt-get install apt-transport-https ca-certificates curl gnupg2 software-properties-common
+
+curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
+apt-key fingerprint 0EBFCD88
+
+add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/debian \
+   $(lsb_release -cs) \
+   stable"
+
+apt-get update
+apt-get install docker-ce docker-ce-cli containerd.io
+
+
+
+
+********
+
+Установка Установка Kubelet, Kubectl, Kubeadm и docker c помощью ansible
+
+******
 
 
 
 
 
+Теперь пора время вернуться к той строчке, которую нам сгенерировал kubeadm при установке мастер ноды.
+У меня она выглядит так.
 
 
-   
+kubeadm join 10.73.71.25:6443 --token ivwoap.259retezqf34amx8 \
+    --discovery-token-ca-cert-hash sha256:b5c93e32457c8e6478782ff62e8ef77acf72738dda59cd603cdf4821abe12ca3
+
+Нужно выполнить данную команду на каждой worker ноде.
+Если Вы не записали токен, то можно сгенерировать новый
+
+
+kubeadm token create --print-join-command --ttl=0
+
+После того, как kubeadm отработает, Ваша новая нода введена в кластер и готова для работы
+
+
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+
+Теперь посмотрим на результат
+
+
+root@master01:~# kubectl get nodes
+NAME         STATUS   ROLES    AGE     VERSION
+master01     Ready    master   10d     v1.15.1
+master02     Ready    master   10d     v1.15.1
+master03     Ready    master   10d     v1.15.1
+worknode01   Ready    <none>   5m44s   v1.15.1
+worknode02   Ready    <none>   59s     v1.15.1
+worknode03   Ready    <none>   51s     v1.15.1
 
 
 
-``
+
+## Устанавливаем haproxy на worknodes
+
+Теперь мы имеем рабочий кластер с тремя master нодами и тремя worker нодами.
+Проблема в том, что сейчас наши worker ноды не имеют HA режима.
+Если посмотреть на конфиг файл kubelet, то мы увидим, что наши worker ноды обращаются только к одной master ноде из трех.
+
+
+root@worknode01:~# cat /etc/kubernetes/kubelet.conf | grep server:
+    server: https://10.73.71.27:6443
+
+В моем случае это master03. При данной конфигурации, в случае падения master03, worker нода потеряет связь с API сервером кластера. 
+Чтобы наш кластер стал полностью HA, мы установим на каждый из воркеров Load Balancer (Haproxy), 
+который по round robin будет раскидывать запросы на три master ноды, а в конфигах kubelet на worker нодах мы поменяем адрес сервера на 127.0.0.1:6443
+
+Для начала установим HAProxy на каждую worker ноду.
+Есть неплохая шпаргалка по установке
+https://haproxy.debian.net/
+
+```
+# curl https://haproxy.debian.net/bernat.debian.org.gpg | \
+      apt-key add -
+
+# echo deb http://haproxy.debian.net stretch-backports-2.0 main | \
+      tee /etc/apt/sources.list.d/haproxy.list
+
+# apt-get update
+# apt-get install haproxy=2.0.\*
+```
+
+
+После того, как HAproxy, установлен нам нужно создать для него конфиг.
+Если на worker нодах нет каталога с конфиг файлами, то клонируем его
+
+
+git clone https://github.com/rjeka/kubernetes-ceph-percona.git
+cd kubernetes-ceph-percona/
+
+И запускаем скрипт конфига с флагом haproxy
+
+
+./create-config.sh haproxy
+
+Скрипт сконфигурирует и перезапустит haproxy.
+Проверим, что haproxy стал слушать порт 6443.
+
+
+root@worknode01:~/kubernetes-ceph-percona# netstat -alpn | grep 6443
+tcp        0      0 127.0.0.1:6443          0.0.0.0:*               LISTEN      30675/haproxy
+tcp        0      0 10.73.75.241:6443       0.0.0.0:*               LISTEN      30675/haproxy
+
+Теперь нам нужно сказать kubelet, чтобы он обращался на localhost вместо master ноды. 
+Для этого нужно отредактировать значение server в файлах /etc/kubernetes/kubelet.conf и /etc/kubernetes/bootstrap-kubelet.conf на всех worker нодах.
+
+
+vim  /etc/kubernetes/kubelet.conf
+vim /etc/kubernetes/bootstrap-kubelet.conf
+
+Значение server должно принять вот такой вид:
+
+
+server: https://127.0.0.1:6443
+
+После внесения изменений нужно перезапустить службы kubelet и docker
+
+
+systemctl restart kubelet && systemctl restart docker
+
+Проверим, что все ноды работают исправно
+
+
+kubectl get nodes
+NAME         STATUS   ROLES    AGE     VERSION
+master01     Ready    master   29m     v1.15.1
+master02     Ready    master   27m     v1.15.1
+master03     Ready    master   26m     v1.15.1
+worknode01   Ready    <none>   25m     v1.15.1
+worknode02   Ready    <none>   3m15s   v1.15.1
+worknode03   Ready    <none>   3m16s   v1.15.1
+
+Пока что у нас нет приложений в кластере, чтобы проверить работу HA.
+Но мы можем остановить работу kubelet на первой master ноде и убедится, что наш кластер остался дееспособным.
+
+
+systemctl stop kubelet && systemctl stop docker
+
+Проверяем со второй master ноды
+
+
+root@master02:~# kubectl get nodes
+NAME         STATUS     ROLES    AGE   VERSION
+master01     NotReady   master   15h   v1.15.1
+master02     Ready      master   15h   v1.15.1
+master03     Ready      master   15h   v1.15.1
+worknode01   Ready      <none>   15h   v1.15.1
+worknode02   Ready      <none>   15h   v1.15.1
+worknode03   Ready      <none>   15h   v1.15.1
+
+Все ноды функционируют нормально, кроме той, на которой мы остановили службы.
+Не забываем включить обратно службы kubernetes на первой master ноде
+
+
+systemctl start kubelet && systemctl start docker
+>>>>>>>>>>>>
 
 
 
+Установка Ingress контроллера
+
+Ingress контроллер — это дополнение Kubernetes, c помощью которого мы можем получить доступ до наших приложений снаружи. 
+Подробное описание есть в документации Kuberbnetes. 
+Ingress контролеров существует достаточное большое количество, я пользуюсь контроллером от Nginx. 
+Про его установку я и буду рассказывать. 
+Документацию по работе, настройке и установке Ingress контроллера от Nginx можно почитать на официальном сайте
+
+
+Приступим к установке, все команды можно выполнять с master01.
+
+Устанавливаем сам контроллер
+
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml
+
+А теперь — сервис, через который будет доступен ингресс
+Для этого подготовим конфиг
+
+
+./create-config.sh ingress
+
+И отправим его в наш кластер
+
+
+kubectl apply -f ingress/service-nodeport.yaml
+
+Проверим, что наш Ingress работает на нужных адресах и слушает нужные порты
+
+
+# kubectl get svc -n ingress-nginx
+NAME            TYPE       CLUSTER-IP    EXTERNAL-IP                           PORT(S)                      AGE
+ingress-nginx   NodePort   10.99.35.95   10.73.71.25,10.73.71.26,10.73.71.27   80:31669/TCP,443:31604/TCP   10m
+
+ kubectl describe svc -n ingress-nginx ingress-nginx
+Name:                     ingress-nginx
+Namespace:                ingress-nginx
+Labels:                   app.kubernetes.io/name=ingress-nginx
+                          app.kubernetes.io/part-of=ingress-nginx
+Annotations:              kubectl.kubernetes.io/last-applied-configuration:
+                            {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app.kubernetes.io/name":"ingress-nginx","app.kubernetes.io/par...
+Selector:                 app.kubernetes.io/name=ingress-nginx,app.kubernetes.io/part-of=ingress-nginx
+Type:                     NodePort
+IP:                       10.99.35.95
+External IPs:             10.73.71.25,10.73.71.26,10.73.71.27
+Port:                     http  80/TCP
+TargetPort:               80/TCP
+NodePort:                 http  31669/TCP
+Endpoints:                192.168.142.129:80
+Port:                     https  443/TCP
+TargetPort:               443/TCP
+NodePort:                 https  31604/TCP
+Endpoints:                192.168.142.129:443
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+
+Установка Web UI (Dashboard)
+
+У Kubernetes есть стандартный Web UI, через который иногда удобно быстро глянуть состояние кластера или отдельных его частей. 
+Я в своей работе часто использую dashboard для первичной диагностики деплоя или состояния частей кластера.
+Ссылка на документацию находится на сайте kubernetes
+Установка. Я использую стабильную версию, 2.0 пока что не пробовал.
+
+
+#Стабильная версия
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v1.10.1/src/deploy/recommended/kubernetes-dashboard.yaml
+#Версия 2.0
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta1/aio/deploy/recommended.yaml
+
+После того, как мы установили панель в наш кластер, панель стала доступна по адресу
+
+
+http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/.
+
+Но для того, чтобы на нее попасть, нам нужно с локальной машины пробросить порты с помощью kubectl proxy. 
+Для меня эта схема очень не удобная. 
+Поэтому я изменю service панели управления, для того чтобы dashboard стал доступен на адресе любой ноды кластера на порту 30443. 
+Есть еще другие способы получить доступ до дашборда, например, через ingress. Возможно, я рассмотрю этот способ в следующих публикациях.
+Для изменения сервиса запустим деплой измененного сервиса
+
+
+kubectl apply -f dashboard/service-nodeport.yaml
+
+Осталось создать admin пользователя и token для доступа к кластеру через дашборд
+
+
+kubectl apply -f dashboard/rbac.yaml
+kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}')
 
 
 
