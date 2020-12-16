@@ -137,9 +137,9 @@ Docker (https://docs.docker.com/engine/install/debian/)
 
 ### Add Docker’s official GPG key
 
-# curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+# curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
 
-# sudo apt-key fingerprint 0EBFCD88
+# apt-key fingerprint 0EBFCD88
 
 # lsb_release -cs
 
