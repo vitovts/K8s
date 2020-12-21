@@ -28,6 +28,10 @@ minicube delete
 
 minicube start --cpu=4 --memory=8gb --disk-size=25gb
 
+minicube ssh
+
+
+
 
 kubectl get componentstatuses
 
