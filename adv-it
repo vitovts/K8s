@@ -1,0 +1,21 @@
+
+
+Win10 install minicube
+
+VirtualBox
+```
+https://www.virtualbox.org/wiki/Downloads
+```
+
+kubectl
+```
+https://kubernetes.io/docs/tasks/tools/install-kubectl/
+get https://storage.googleapis.com/kubernetes-release/release/v1.20.0/bin/windows/amd64/kubectl.exe
+```
+
+minikube
+```
+https://minikube.sigs.k8s.io/docs/start/
+```
+
+
