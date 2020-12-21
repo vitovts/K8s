@@ -18,4 +18,21 @@ minikube
 https://minikube.sigs.k8s.io/docs/start/
 ```
 
+Прописать в переменные среды -> path
+
+Powershell
+```
+minicube start
+minicube stop
+minicube delete
+
+minicube start --cpu=4 --memory=8gb --disk-size=25gb
+
+
+kubectl get componentstatuses
+
+kubectl cluster-info
+
+kubectl get nodes
+
 
