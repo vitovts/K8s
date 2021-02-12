@@ -1,0 +1,65 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: my-web-deployment-autoscaling
+  labels:
+    env  : prod-ws-k8s
+    app  : ws-my-k8s-deployment
+    tier : frontend
+    owner: WS
+spec:
+
+  selector:
+    matchLabels:
+      project: my-project3
+  template:
+     metadata:
+       labels:
+         project: my-project3  # Service will look for those PDS Labels!!!
+     spec:
+       containers:
+        - name : my-project1-web
+          image : vitovts/k8s:latest
+          ports :
+            - containerPort: 80   # Port on Pods
+
+
+apiVersion : autoscaling/v2beta1
+kind : HorizontalPodAutoscaler
+metadata :
+  name : my-autoscaling
+spec :
+  scaleTargetRef :
+    apiVersion: apps/v2beta1v1
+    kind : Deployment
+    name : my-web-deployment-autoscaling
+  minReplicas : 2
+  maxReplicas : 5
+  metrics :
+    - type : Resource
+      resource :
+        name : cpu
+        targetAverageUtilization : 70
+    - type : Resource
+      resource:
+        name : memory
+        targetAverageUtilization : 80
+---
+apiVersion : v1
+kind : Service
+metadata :
+  name : my-ws-autoscaling-pod-service
+  labels:
+    env : prod-ws-k8s
+    app : ws-my-k8s-deployment
+    tier : frontend
+    owner : WS
+spec :
+  selector :
+    project : my-project3 # Selecting PODS with those labels
+  ports :
+    - name        : app-listener
+      protocol    : TCP
+      port        : 80 # Port on Load Balancer
+      targetPort  : 80 # Port on POD
+  type : LoadBalancer

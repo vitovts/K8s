@@ -1,0 +1,43 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: my-web-deployment
+  labels:
+    env  : prod-ws-k8s
+    app  : ws-my-k8s-deployment
+    tier : frontend
+    owner: WS
+spec:
+  replicas : 3
+  selector:
+    matchLabels:
+      project: my-project1
+  template:
+     metadata:
+       labels:
+         project: my-project1  # Service will look for those PDS Labels!!!
+     spec:
+       containers:
+        - name : my-project1-web
+          image : vitovts/k8s:latest
+          ports :
+            - containerPort: 80
+---
+apiVersion : v1
+kind : Service
+metadata :
+  name : my-ws-syngle-pod-service
+  labels:
+    env : prod-ws-k8s
+    app : ws-my-k8s-deployment
+    tier : frontend
+    owner : WS
+spec :
+  selector :
+    project : my-project1 # Selecting PODS with those labels
+  ports :
+    - name        : app-listener
+      protocol    : TCP
+      port        : 80 # Port on Load Balancer
+      targetPort  : 80 # Port on POD
+  type : LoadBalancer

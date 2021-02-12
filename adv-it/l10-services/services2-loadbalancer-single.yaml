@@ -1,0 +1,55 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: my-web-deployment-multi-pod
+  labels:
+    env  : prod-ws-k8s
+    app  : ws-my-k8s-deployment
+    tier : frontend
+    owner: WS
+spec:
+  replicas : 3
+  selector:
+    matchLabels:
+      project: my-project2
+  template:
+     metadata:
+       labels:
+         project: my-project2  # Service will look for those PDS Labels!!!
+     spec:
+       containers:
+        - name : my-project1-web
+          image : vitovts/k8s:latest
+          ports :
+            - containerPort: 80   # Port on Pods
+
+        - name: not-my-project1-web
+          image: tomcat:8.5.38
+          ports:
+            - containerPort: 8080 # Port on Pods
+---
+apiVersion : v1
+kind : Service
+metadata :
+  name : my-ws-syngle-pod-multi
+  labels:
+    env : prod-ws-k8s
+    app : ws-my-k8s-deployment
+    tier : frontend
+    owner : WS
+spec :
+  selector :
+    project : my-project2 # Selecting PODS with those labels
+  type : LoadBalancer
+  ports :
+    - name        : my-web-app-listener
+      protocol    : TCP
+      port        : 80 # Port on Load Balancer
+      targetPort  : 80 # Port on POD
+    - name        : not-my-web-app-listener
+      protocol    : TCP
+      port        : 8888 # Port on Load Balancer
+      targetPort  : 8080 # Port on POD
+
+
+
