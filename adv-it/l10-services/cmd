@@ -1,0 +1,35 @@
+kubectl create deployment ws-deployment --image nginx:latest
+
+kubectl scale deployment ws-deployment --replicas 3
+
+kubectl get pods
+
+kubectl get nods
+
+Service
+ClasterIP
+
+kubectl expose deployment ws-deployment --type=ClusterIP --port 80
+kubectl get services
+kubectl get svc
+
+ssh -> nodes -> curl x.x.x.x
+
+kubectl delete services ws-deployment
+kubectl get deploy
+
+kubectl expose deployment ws-deployment --type=NodePort --port 80
+kubectl describe nodes | grep ExternalIP
+
+kubectl delete svc ws-deployment
+
+kubectl expose deployment ws-deployment --type=LoadBalancer --port 80
+kubectl get svc
+
+
+kubectl apply -f xxx.yaml
+
+
+
+
+
