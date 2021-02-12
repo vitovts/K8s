@@ -1,0 +1,23 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: my-web-deployment
+  labels:
+    env  : prod
+    app  : my-deployment
+    tier : frontend
+    owner: WS
+spec:
+  selector:
+    matchLabels:
+      project: my-project
+  template:
+     metadata:
+       labels:
+         project: my-project
+     spec:
+       containers:
+        - name : my-project-web
+          image : nginx:latest
+          ports :
+            - containerPort: 80

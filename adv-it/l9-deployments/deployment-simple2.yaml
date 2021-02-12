@@ -1,0 +1,24 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: my-web-deployment-r3
+  labels:
+    env  : prod-ws-k8s
+    app  : ws-my-deployment
+    tier : frontend
+    owner: WS
+spec:
+  replicas : 3
+  selector:
+    matchLabels:
+      project: my-project-r3
+  template:
+     metadata:
+       labels:
+         project: my-project-r3
+     spec:
+       containers:
+        - name : my-project-web-r3
+          image : nginx:latest
+          ports :
+            - containerPort: 80

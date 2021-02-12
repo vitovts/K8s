@@ -1,0 +1,48 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: my-web-deployment-autoscaling
+  labels:
+    env  : prod-ws-k8s
+    app  : ws-my-deployment
+    tier : frontend
+    owner: WS
+spec:
+  replicas : 2
+  selector:
+    matchLabels:
+      project: my-project-autoscaling
+  template:
+     metadata:
+       labels:
+         project: my-project-autoscaling
+     spec:
+       containers:
+        - name : my-project-web-autoscaling
+          image : nginx:latest
+          ports :
+            - containerPort: 80
+
+---
+apiVersion : autoscaling/v2beta1
+kind : HorizontalPodAutoscaler
+metadata :
+  name : my-autoscaling
+spec :
+  scaleTargetRef :
+    apiVersion: aaps/v2beta1v1
+    kind : Deployment
+    name : my-web-deployment-autoscaling
+  minReplicas : 2
+  maxReplicas : 5
+  metrics :
+    - type : Resource
+      resource :
+        name : cpu
+        targetAverageUtilization : 70
+    - type : Resource
+      resource:
+        name : memory
+        targetAverageUtilization : 80
+
+
