@@ -1,0 +1,10 @@
+python.org -> install python3
+
+https://cloud.google.com/sdk/docs/install#mac
+https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-321.0.0-darwin-x86_64.tar.gz
+./google-cloud-sdk/install.sh
+/google-cloud-sdk/bin/gcloud init
+
+gcloud container clusters create ws
+
+gcloud container clusters delete ws
