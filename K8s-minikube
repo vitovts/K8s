@@ -1,13 +1,11 @@
-
-
 Win10 install minicube
 
-VirtualBox
+1. VirtualBox
 ```
 https://www.virtualbox.org/wiki/Downloads
 ```
 
-kubectl
+2. kubectl
 ```
 https://kubernetes.io/docs/tasks/tools/install-kubectl/
 get https://storage.googleapis.com/kubernetes-release/release/v1.20.0/bin/windows/amd64/kubectl.exe
@@ -26,10 +24,11 @@ minicube start
 minicube stop
 minicube delete
 
-minicube start --cpu=4 --memory=8gb --disk-size=25gb
+minicube start --cpus=4 --memory=8gb --disk-size=25gb
 
 minicube ssh
 
+docker/tcuser
 
 
 
