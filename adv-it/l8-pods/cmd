@@ -1,0 +1,9 @@
+ubectl apply -f pod-myapp-ver1.yaml
+kubectl delete -f pod-myapp-ver1.yaml
+
+kubectl get pods
+kubectl describe pods myapp
+
+
+kubectl port-forward my-app 5555:8080
+
