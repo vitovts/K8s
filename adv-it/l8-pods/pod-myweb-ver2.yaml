@@ -1,0 +1,16 @@
+apiVersion : v1
+kind: Pod
+metadata:
+  name: my-web
+  labels:
+    env  : prod
+    app  : main
+    tier : frontend
+    owner: WS
+spec:
+  containers:
+    - name : nginx
+      image : nginx:latest
+      ports:
+        - containerPort: 80
+        
