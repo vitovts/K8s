@@ -1,0 +1,13 @@
+docker build -t myk8sapp .
+
+docker tag myk8sapp:latest vitovts/k8sphp:latest
+docker login
+docker push vitovts/k8sphp:latest
+
+
+#docker pull webdevops/php-nginx
+docker pull httpd
+
+docker container run -d -p 80:80 --name nginx webdevops/php-nginx
+docker container run -d -p 80:80 --name web httpd
+docker container run -d -p 80:80 --name web myk8sapp
