@@ -26,17 +26,26 @@ kubectl apply -f pod-myweb-ver1.yaml
 
 kubectl delete -f pod-myweb-ver1.yaml
 
+Label
+kubectl apply -f pod-myweb-ver2.yaml
+kubectl delete -f pod-myweb-ver2.yaml
 
 ---
-
-
-
 kubectl apply -f pod-myapp-ver1.yaml
+kubectl describe pods my-app
+kubectl port-forward my-app 5555:80
+kubectl port-forward my-app 5555:8080
+
+kubectl delete -f pod-myapp-ver1.yaml
+
+-----
+
+minikube
+kubectl apply -f pod-myapp-ver1.yaml
+kubectl describe pods my-app
+kubectl port-forward my-app 5555:80
+kubectl port-forward my-app 5555:8080
 kubectl delete -f pod-myapp-ver1.yaml
 
 
-kubectl describe pods myapp
-
-
-kubectl port-forward my-app 5555:8080
 
