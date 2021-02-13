@@ -38,6 +38,11 @@ kubectl set image deployment/ws-deploy nginx=nginx:latest --record
 
 # возврат на пред идущую версию
 kubectl rollout undo deployment/ws-deploy
+kubectl rollout undo deployment/ws-deploy --to-revision=2
+
+
+
+
 
 #
 kubectl describe deployment/ws-deployment
