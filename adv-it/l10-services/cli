@@ -1,29 +1,27 @@
-kubectl create deployment ws-deployment --image nginx:latest
+kubectl create deployment ws-deploy --image vitovts/k8sphp:latest
 
-kubectl scale deployment ws-deployment --replicas 3
+kubectl scale deployment ws-deploy --replicas 3
 
 kubectl get pods
-
 kubectl get nods
 
-Service
-ClasterIP
+Service -> ClasterIP
 
-kubectl expose deployment ws-deployment --type=ClusterIP --port 80
+kubectl expose deployment ws-deploy --type=ClusterIP --port 80
 kubectl get services
 kubectl get svc
 
 ssh -> nodes -> curl x.x.x.x
 
-kubectl delete services ws-deployment
+kubectl delete services ws-deploy
 kubectl get deploy
 
-kubectl expose deployment ws-deployment --type=NodePort --port 80
+kubectl expose deployment ws-deploy --type=NodePort --port 80
 kubectl describe nodes | grep ExternalIP
 
-kubectl delete svc ws-deployment
+kubectl delete svc ws-deploy
 
-kubectl expose deployment ws-deployment --type=LoadBalancer --port 80
+kubectl expose deployment ws-deploy --type=LoadBalancer --port 80
 kubectl get svc
 
 
