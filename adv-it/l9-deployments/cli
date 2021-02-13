@@ -39,19 +39,42 @@ kubectl set image deployment/ws-deploy nginx=nginx:latest --record
 # возврат на пред идущую версию
 kubectl rollout undo deployment/ws-deploy
 kubectl rollout undo deployment/ws-deploy --to-revision=2
+kubectl describe deployment/ws-deployment
+
+# restart
+kubectl rollout restart deployment/ws-deploy
 
 
-
+kubectl port-forward my-web-deploy-r3-b699d9b74-dnsgq 5555:80
 
 
 #
-kubectl describe deployment/ws-deployment
-# restart
-kubectl rollout restart deployment/ws-deploy
+kubectl apply -f deployment-simple1.yaml
+kubectl apply -f deployment-simple2.yaml
+kubectl port-forward my-web-deploy-r3-b699d9b74-dnsgq 5555:80
+
+
+HorizontalPodAutoscaler
+
+metadata:
+  name: my-web-deployment-autoscaling
+>>>
+spec :
+  scaleTargetRef :
+    apiVersion: apps/v2beta1v1
+    kind : Deployment
+    name : my-web-deployment-autoscaling
+    
+ 
+kubectl delete -f deployment-simple1.yaml 
+kubectl delete -f deployment-simple2.yaml
+
+
 # delete all deployment
 kubectl delete deployment --all
 
 
-kubectl port-forward my-web-deploy-r3-b699d9b74-dnsgq 5555:80
+    
+  
 
 
