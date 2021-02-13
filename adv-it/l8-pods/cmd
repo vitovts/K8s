@@ -3,8 +3,9 @@ gcloud container cluster create ...
 kubectl get nodes
 kubectl get pods
 
-kubectl run web --generator=run/pod/v1 --images=vitovts/k8sphp:latest
+kubectl run web --generator=run-pod/v1 --images=vitovts/k8sphp:latest --port=80
 
+kubectl delete pods web
 
 kubectl apply -f pod-myapp-ver1.yaml
 kubectl delete -f pod-myapp-ver1.yaml
