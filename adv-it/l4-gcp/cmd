@@ -1,5 +1,9 @@
+#python
+python3 --version
+>>>
 python.org -> install python3
 
+#MacOS
 https://cloud.google.com/sdk/docs/install#mac
 https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-321.0.0-darwin-x86_64.tar.gz
 ./google-cloud-sdk/install.sh
@@ -8,3 +12,59 @@ https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-321.
 gcloud container clusters create ws
 
 gcloud container clusters delete ws
+
+
+#Lunux
+https://cloud.google.com/sdk/docs/install#deb
+
+Add the Cloud SDK distribution URI as a package source:
+echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+Make sure you have apt-transport-https installed:
+sudo apt-get install apt-transport-https ca-certificates gnupg
+
+mport the Google Cloud public key:
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+
+Update and install the Cloud SDK:
+sudo apt-get update && sudo apt-get install google-cloud-sdk
+
+Optionally, install any of these additional components:
+google-cloud-sdk-app-engine-python
+google-cloud-sdk-app-engine-python-extras
+google-cloud-sdk-app-engine-java
+google-cloud-sdk-app-engine-go
+google-cloud-sdk-bigtable-emulator
+google-cloud-sdk-cbt
+google-cloud-sdk-cloud-build-local
+google-cloud-sdk-datalab
+google-cloud-sdk-datastore-emulator
+google-cloud-sdk-firestore-emulator
+google-cloud-sdk-pubsub-emulator
+kubectl
+
+sudo apt-get install kubectl google-cloud-sdk-app-engine-java google-cloud-sdk-app-engine-python google-cloud-sdk-app-engine-python-extras
+
+
+Run gcloud init to get started:
+gcloud init
+
+
+kubectl version --client
+gcloud services enable container.googleapis.com
+gcloud container clusters create ws
+gcloud container clusters get-cridentials ws
+
+kubectl cluster-info
+kubectl get componetstatus
+kubectl get nodes
+
+gcloud container clusters create ws1 --num-nodes=2
+
+gcloud container clusters delete ws
+
+
+
+
+
+
