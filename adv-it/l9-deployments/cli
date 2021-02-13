@@ -21,31 +21,32 @@ kubectl rollout history deployment/ws-deploy
 kubectl rollout status deployment/ws-deploy
 
 
+# преход на новую версию
 kubectl describe deployment ws-deploy
 >>> Containers:
     k8sphp:
  ...
-kubectl set image deployment/ws-deploy k8asphp=nginx:latest
-kubectl set image deployment/ws-deploy k8asphp=vitovts/k8sphp:version1 --record
+kubectl set image deployment/ws-deploy k8sphp=nginx:latest
+kubectl set image deployment/ws-deploy k8sphp=vitovts/k8sphp:version1 --record
+kubectl rollout history deployment/ws-deploy
+kubectl set image deployment/ws-deploy k8sphp=vitovts/k8sphp:version2 --record
 
 
-# преход на новую версию
+kubectl set image deployment/ws-deploy nginx=nginx --record
+kubectl set image deployment/ws-deploy nginx=nginx --to-revision=4
+kubectl set image deployment/ws-deploy nginx=nginx:latest --record
 
-
-
-kubectl set image deployment/ws-deployment nginx=nginx --record
-kubectl set image deployment/ws-deployment nginx=nginx --to-revision=4
-kubectl set image deployment/ws-deployment nginx=nginx:latest --record
 # возврат на пред идущую версию
-kubectl rollout undo deployment/ws-deployment
+kubectl rollout undo deployment/ws-deploy
+
 #
 kubectl describe deployment/ws-deployment
 # restart
-kubectl rollout restart deployment/ws-deployment
+kubectl rollout restart deployment/ws-deploy
 # delete all deployment
 kubectl delete deployment --all
 
 
-kubectl port-forward my-web-deployment-r3-b699d9b74-dnsgq 5555:80
+kubectl port-forward my-web-deploy-r3-b699d9b74-dnsgq 5555:80
 
 
