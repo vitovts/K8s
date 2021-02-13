@@ -15,7 +15,19 @@ kubectl logs web
 
 kubectl port-forward web 5555:80
 
+-----
 
+kubectl apply -f pod-myweb-ver1.yaml
+kubectl port-forward my-web 5555:80
+
+Возможна только подмена image в pod-myweb-ver1.yaml
+  image : nginx:latest >>> vitovts/k8sphp
+kubectl apply -f pod-myweb-ver1.yaml
+
+kubectl delete -f pod-myweb-ver1.yaml
+
+
+---
 
 
 
