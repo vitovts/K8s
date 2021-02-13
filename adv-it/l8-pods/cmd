@@ -6,6 +6,18 @@ kubectl get pods
 kubectl run web --generator=run-pod/v1 --image=vitovts/k8sphp:latest --port=80
 
 kubectl delete pods web
+kubectl describe pods web
+
+kubectl exec web date
+kubectl exec web sh
+kubectl exec -it web sh
+kubectl logs web 
+
+kubectl port-forward web 5555:80
+
+
+
+
 
 kubectl apply -f pod-myapp-ver1.yaml
 kubectl delete -f pod-myapp-ver1.yaml
