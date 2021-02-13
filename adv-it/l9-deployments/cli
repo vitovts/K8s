@@ -2,23 +2,37 @@ Deployments
 
 kubectl get deployments
 
-kubectl create deployment ws-deployment --image nginx:latest
+kubectl create deployment ws-deploy --image vitovts/k8sphp:latest --port=80
 
 kubectl get deploy
+kubectl describe deploy
 
-kubectl scale deployment ws-deployment --replicas 4
-
+kubectl scale deployment ws-deploy --replicas 4
+kubectl get deploy
 kubectl get rs
+kubectl delete pods xxx
+kubectl get pods
 
-kubectl autoscale deployment ws-deployment --min=4 --max=6 --cpu-percent=80
-
+kubectl autoscale deployment ws-deploy --min=4 --max=6 --cpu-percent=80
 kubectl get hpa
 
 #
-kubectl rollout history deployment/ws-deployment
-kubectl rollout status deployment/ws-deployment
+kubectl rollout history deployment/ws-deploy
+kubectl rollout status deployment/ws-deploy
+
+
+kubectl describe deployment ws-deploy
+>>> Containers:
+    k8sphp:
+ ...
+kubectl set image deployment/ws-deploy k8asphp=nginx:latest
+kubectl set image deployment/ws-deploy k8asphp=vitovts/k8sphp:version1 --record
+
 
 # преход на новую версию
+
+
+
 kubectl set image deployment/ws-deployment nginx=nginx --record
 kubectl set image deployment/ws-deployment nginx=nginx --to-revision=4
 kubectl set image deployment/ws-deployment nginx=nginx:latest --record
