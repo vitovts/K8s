@@ -1,0 +1,80 @@
+Deployments
+
+kubectl get deployments
+
+kubectl create deployment ws-deploy --image vitovts/k8sphp:latest --port=80
+
+kubectl get deploy
+kubectl describe deploy
+
+kubectl scale deployment ws-deploy --replicas 4
+kubectl get deploy
+kubectl get rs
+kubectl delete pods xxx
+kubectl get pods
+
+kubectl autoscale deployment ws-deploy --min=4 --max=6 --cpu-percent=80
+kubectl get hpa
+
+#
+kubectl rollout history deployment/ws-deploy
+kubectl rollout status deployment/ws-deploy
+
+
+# преход на новую версию
+kubectl describe deployment ws-deploy
+>>> Containers:
+    k8sphp:
+ ...
+kubectl set image deployment/ws-deploy k8sphp=nginx:latest
+kubectl set image deployment/ws-deploy k8sphp=vitovts/k8sphp:version1 --record
+kubectl rollout history deployment/ws-deploy
+kubectl set image deployment/ws-deploy k8sphp=vitovts/k8sphp:version2 --record
+
+
+kubectl set image deployment/ws-deploy nginx=nginx --record
+kubectl set image deployment/ws-deploy nginx=nginx --to-revision=4
+kubectl set image deployment/ws-deploy nginx=nginx:latest --record
+
+# возврат на пред идущую версию
+kubectl rollout undo deployment/ws-deploy
+kubectl rollout undo deployment/ws-deploy --to-revision=2
+kubectl describe deployment/ws-deployment
+
+# restart
+kubectl rollout restart deployment/ws-deploy
+
+
+kubectl port-forward my-web-deploy-r3-b699d9b74-dnsgq 5555:80
+
+
+#
+kubectl apply -f deployment-simple1.yaml
+kubectl apply -f deployment-simple2.yaml
+kubectl port-forward my-web-deploy-r3-b699d9b74-dnsgq 5555:80
+
+
+HorizontalPodAutoscaler
+
+metadata:
+  name: my-web-deployment-autoscaling
+>>>
+spec :
+  scaleTargetRef :
+    apiVersion: apps/v2beta1v1
+    kind : Deployment
+    name : my-web-deployment-autoscaling
+    
+ 
+kubectl delete -f deployment-simple1.yaml 
+kubectl delete -f deployment-simple2.yaml
+
+
+# delete all deployment
+kubectl delete deployment --all
+
+
+    
+  
+
+

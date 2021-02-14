@@ -30,7 +30,7 @@ metadata :
   name : my-autoscaling
 spec :
   scaleTargetRef :
-    apiVersion: aaps/v2beta1v1
+    apiVersion: apps/v2beta1v1
     kind : Deployment
     name : my-web-deployment-autoscaling
   minReplicas : 2

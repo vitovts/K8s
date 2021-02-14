@@ -1,0 +1,64 @@
+#---------------------------------------------------------------------
+# Manifest File to create Multi Container Pods Deployment with Service
+#
+# Copyleft (c) by xxxx xxxx 2021
+#---------------------------------------------------------------------
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: deployment-node-tiket-service
+  labels:
+    app : k8s-deployment-node-tiket-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      project: node-tiket-service
+  template:
+    metadata:
+      labels:
+        project: node-tiket-service
+    spec:
+      containers:
+        - name : node-ticket-service_app
+          image: vitovts/k8snts:latest
+          ports:
+            - containerPort: 8000   # Port on Pod
+            - containerPort: 3000
+            - containerPort: 9229
+
+        - name : node-ticket-service_postgres
+          image: postgres:12.0-alpine
+          environment:
+            POSTGRES_USER: pguser
+            POSTGRES_PASSWORD: pguserpw
+            POSTGRES_DB: pgdb
+          ports:
+            - containerPort: 5432  # Port on Pod
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-node-tiket-service
+  labels:
+     env  : prod
+     owner: Cogniteq
+spec:
+  type: LoadBalancer
+  selector:
+    project: node-tiket-service
+  ports:
+    - name      : node-ticket-service_app-listener1
+      protocol  : TCP
+      port      : 8000
+      targetPort: 8000
+    - name      : node-ticket-service_app-listener2
+      protocol  : TCP
+      port      : 9229
+      targetPort: 9229
+
+    - name      : node-ticket-service_postgres-listener1
+      protocol  : TCP
+      port      : 5432
+      targetPort: 5432

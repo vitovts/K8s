@@ -1,0 +1,51 @@
+gcloud container cluster create ...
+
+kubectl get nodes
+kubectl get pods
+
+kubectl run web --generator=run-pod/v1 --image=vitovts/k8sphp:latest --port=80
+
+kubectl delete pods web
+kubectl describe pods web
+
+kubectl exec web date
+kubectl exec web sh
+kubectl exec -it web sh
+kubectl logs web 
+
+kubectl port-forward web 5555:80
+
+-----
+
+kubectl apply -f pod-myweb-ver1.yaml
+kubectl port-forward my-web 5555:80
+
+Возможна только подмена image в pod-myweb-ver1.yaml
+  image : nginx:latest >>> vitovts/k8sphp
+kubectl apply -f pod-myweb-ver1.yaml
+
+kubectl delete -f pod-myweb-ver1.yaml
+
+Label
+kubectl apply -f pod-myweb-ver2.yaml
+kubectl delete -f pod-myweb-ver2.yaml
+
+---
+kubectl apply -f pod-myapp-ver1.yaml
+kubectl describe pods my-app
+kubectl port-forward my-app 5555:80
+kubectl port-forward my-app 5555:8080
+
+kubectl delete -f pod-myapp-ver1.yaml
+
+-----
+
+minikube
+kubectl apply -f pod-myapp-ver1.yaml
+kubectl describe pods my-app
+kubectl port-forward my-app 5555:80
+kubectl port-forward my-app 5555:8080
+kubectl delete -f pod-myapp-ver1.yaml
+
+
+
