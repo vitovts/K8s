@@ -1,0 +1,46 @@
+
+
+URL: https://www.youtube.com/redirect?event=video_description&redir_token=QUFFLUhqbXk2UXNzSWNuX3pSSU12VjlUc3lXWDhWZ3c1d3xBQ3Jtc0ttekdZSjMxWEJ6Y0luVEl4U243U0tGRWltREFsN1AtTlFMLW0xZlIzOEk5S0hYSXR2alZhaWo4UzN6b0ZNOWVrU1pQQVVwRUY3aE5nODc0cVJFX0hGTEsyMmlaMkxBaUJucFV2dlQzODhZN2FUMnZBTQ&q=https%3A%2F%2Fdocs.google.com%2Fspreadsheets%2Fd%2F191WWNpjJ2za6-nbG4ZoUMXMpUK8KlCIosvQB0f-oq3k
+
+
+### Install Ingress Controller: Contour
+
+kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
+kubectl get services -n projectcontour envoy -o wide
+
+Get LoadBalancer IP or DNS Name and assign Your Domain to this DNS name
+
+# Create Deployments
+kubectl create deployment main   --image=vitovts/k8sphp:latest
+kubectl create deployment web1   --image=vitovts/k8sphp:latest
+kubectl create deployment web2   --image=vitovts/k8sphp:latest
+kubectl create deployment webx   --image=vitovts/k8sphp:latest
+kubectl create deployment tomcat --image=tomcat:8.5.38
+
+# Scale Deployments
+kubectl scale deployment main  --replicas 2
+kubectl scale deployment web1  --replicas 2
+kubectl scale deployment web2  --replicas 2
+kubectl scale deployment webx  --replicas 2
+
+# Create Services, default type is: --type=ClusterIP
+kubectl expose deployment main   --port 80
+kubectl expose deployment web1   --port 80
+kubectl expose deployment web2   --port 80
+kubectl expose deployment webx   --port 80
+kubectl expose deployment tomcat --port 8080
+
+
+kubectl get pods
+kubectl get ingress
+
+
+
+
+kubectl apply -f ingress-hosts.yaml
+kubectl apply -f ingress-paths.yaml
+kubectl get ingress
+kubectl describe ingress
+
+# Completely delete Ingress Controller: Contour
+kubectl delete ns projectcontour
