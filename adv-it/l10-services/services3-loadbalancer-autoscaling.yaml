@@ -22,8 +22,7 @@ spec:
           image : vitovts/k8s:latest
           ports :
             - containerPort: 80   # Port on Pods
-
-
+---
 apiVersion : autoscaling/v2beta1
 kind : HorizontalPodAutoscaler
 metadata :
