@@ -25,11 +25,19 @@ kubectl describe nodes | grep ExternalIP
 
 kubectl delete svc ws-deploy
 
+------------
+Service -> LoadPalancer
+
 kubectl expose deployment ws-deploy --type=LoadBalancer --port 80
 kubectl get svc
 
+kubectl delete svc ws-deploy
+
+-------------------------------
 
 kubectl apply -f xxx.yaml
+
+
 
 
 
